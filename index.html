@@ -1,0 +1,1363 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Patiens">
+<meta name="theme-color" content="#174f32">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>Patiens</title>
+<style>
+  :root {
+    --felt: #1d6a42;
+    --felt-dark: #174f32;
+    --red: #c8102e;
+    --black: #111;
+    --blue: #1d5bd6;
+    --green: #138a3e;
+    --gold: #ffd400;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background: var(--felt-dark);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+    overscroll-behavior: none;
+  }
+  #app {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    background: radial-gradient(ellipse at center, #237a4c 0%, var(--felt) 55%, var(--felt-dark) 100%);
+  }
+
+  /* ---------- top bar ---------- */
+  #bar {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+    gap: 10px; padding: 10px 14px;
+    background: rgba(0,0,0,0.28);
+    color: #fff;
+  }
+  .btns { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  button {
+    font: inherit; font-size: 20px; font-weight: 600;
+    min-height: 52px; padding: 0 20px;
+    border: 0; border-radius: 12px;
+    background: #fff; color: #123;
+    box-shadow: 0 2px 0 rgba(0,0,0,0.35);
+    touch-action: manipulation; cursor: pointer;
+  }
+  button:active { transform: translateY(2px); box-shadow: none; }
+  button:disabled { opacity: 0.45; }
+  .seg { display: flex; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 0 rgba(0,0,0,0.35); }
+  .seg button { border-radius: 0; box-shadow: none; background: #e8ece9; color: #345; }
+  .seg button + button { border-left: 2px solid #b9c4bd; }
+  .seg button.on { background: var(--gold); color: #000; }
+  .info { display: flex; gap: 22px; font-size: 22px; align-items: baseline; }
+  .info b { font-size: 28px; font-variant-numeric: tabular-nums; }
+  .info .tm { display: none; }
+  body.timer .info .tm { display: block; }
+  body.fc .info .sc { display: none; }
+
+  /* ---------- board ---------- */
+  #board { position: relative; flex: 1; touch-action: none; overflow: hidden; }
+  #foot {
+    color: rgba(255,255,255,0.85); font-size: 17px; text-align: center;
+    padding: 4px 10px 8px;
+  }
+
+  .slot {
+    position: absolute; left: 0; top: 0;
+    width: var(--cw); height: var(--ch);
+    border: 3px dashed rgba(255,255,255,0.35); border-radius: calc(var(--cw) * 0.09);
+    display: flex; align-items: center; justify-content: center;
+    color: rgba(255,255,255,0.35); font-weight: 700;
+    font-size: calc(var(--cw) * 0.42);
+  }
+  .slot.stock { border-style: solid; cursor: pointer; }
+  .slot.stock .recycle { font-size: calc(var(--cw) * 0.55); line-height: 1; }
+  .slot.stock.empty-all .recycle { opacity: 0.25; }
+  .slot.cell { border-style: solid; border-color: rgba(255,255,255,0.3); background: rgba(0,0,0,0.12); }
+
+  .card {
+    position: absolute; left: 0; top: 0;
+    width: var(--cw); height: var(--ch);
+    transition: transform 0.2s ease;
+    will-change: transform;
+    cursor: pointer;
+  }
+  .card.dragging { transition: none; }
+  .card > div {
+    position: absolute; inset: 0;
+    border-radius: calc(var(--cw) * 0.09);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.45);
+  }
+  .face {
+    display: none;
+    background: #fff; border: 1px solid #8a8a8a;
+  }
+  .face.s0, .face.s3 { color: var(--black); }
+  .face.s1, .face.s2 { color: var(--red); }
+  body.four .face.s2 { color: var(--blue); }
+  body.four .face.s3 { color: var(--green); }
+  .card.up .face { display: block; }
+  .card.up .back { display: none; }
+  .face .rank {
+    position: absolute; left: calc(var(--cw) * 0.07); top: calc(var(--cw) * 0.03);
+    font-size: calc(var(--cw) * 0.30); font-weight: 800; line-height: 1;
+    letter-spacing: -0.04em;
+  }
+  .face .corner {
+    position: absolute; right: calc(var(--cw) * 0.07); top: calc(var(--cw) * 0.05);
+    width: calc(var(--cw) * 0.26); height: calc(var(--cw) * 0.26);
+  }
+  .face .mid {
+    position: absolute; left: 50%; top: 58%;
+    width: calc(var(--cw) * 0.56); height: calc(var(--cw) * 0.56);
+    transform: translate(-50%, -50%);
+  }
+  .face svg { display: block; width: 100%; height: 100%; fill: currentColor; }
+  .back {
+    background-color: #1f4fa0;
+    background-image:
+      repeating-linear-gradient(45deg, rgba(255,255,255,0.13) 0 6px, transparent 6px 12px),
+      repeating-linear-gradient(-45deg, rgba(255,255,255,0.13) 0 6px, transparent 6px 12px);
+    border: calc(var(--cw) * 0.05) solid #fff;
+  }
+
+  .card.hint > div, .slot.hint {
+    box-shadow: 0 0 0 4px var(--gold), 0 0 20px 4px var(--gold);
+  }
+  .card.nope > div { animation: shake 0.35s; }
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    20% { transform: translateX(-7px); }
+    40% { transform: translateX(7px); }
+    60% { transform: translateX(-5px); }
+    80% { transform: translateX(5px); }
+  }
+
+  /* ---------- toast, dialogs, menu ---------- */
+  #toast {
+    position: fixed; left: 50%; bottom: calc(40px + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.85); color: #fff;
+    font-size: 22px; padding: 14px 24px; border-radius: 14px;
+    max-width: 90vw; text-align: center;
+    opacity: 0; pointer-events: none; transition: opacity 0.25s;
+    z-index: 5000;
+  }
+  #toast.show { opacity: 1; }
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+    display: flex; align-items: center; justify-content: center;
+    padding: calc(16px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom));
+  }
+  .overlay[hidden] { display: none; }
+  #menu { z-index: 5500; }
+  #modal { z-index: 6000; }
+  .dialog {
+    background: #fff; color: #123; border-radius: 20px;
+    padding: 28px 30px; max-width: 560px; width: 100%;
+    max-height: 100%; overflow: auto;
+    text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+  }
+  .dialog h2 { margin: 0 0 10px; font-size: 32px; }
+  .dialog p { margin: 0 0 24px; font-size: 22px; line-height: 1.45; white-space: pre-line; }
+  .dialog p.left { text-align: left; }
+  .dialog .row { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .dialog button, .panel button { min-height: 60px; font-size: 22px; background: #e8ece9; }
+  .dialog button.primary, .panel button.primary { background: var(--felt); color: #fff; }
+
+  .panel {
+    background: #fff; color: #123; border-radius: 20px;
+    padding: 22px 26px 26px; width: 100%; max-width: 660px;
+    max-height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+  }
+  .panel h2 { margin: 0 0 4px; font-size: 30px; }
+  .panel h3 { margin: 22px 0 10px; font-size: 22px; color: #2a5a3e; border-top: 2px solid #e3e7e4; padding-top: 16px; }
+  .panel .opt { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 12px 0; font-size: 21px; flex-wrap: wrap; }
+  .panel .seg { box-shadow: none; border: 2px solid #b9c4bd; }
+  .panel .seg button { min-height: 54px; font-size: 20px; }
+  .panel .seg.wide { width: 100%; }
+  .panel .seg.wide button { flex: 1; }
+  .panel .seg button.on { background: var(--gold); color: #000; }
+  .panel .pair { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+  .panel .pair button { flex: 1; }
+  .panel .full { width: 100%; margin-top: 22px; }
+  .srow { display: flex; flex-direction: column; gap: 2px; font-size: 19px; padding: 9px 0; border-bottom: 1px solid #e3e7e4; }
+  .srow b { font-size: 20px; }
+  body.fc .k-only { display: none; }
+
+  #fx { position: fixed; inset: 0; z-index: 5800; }
+  #fx[hidden] { display: none; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="s0" viewBox="0 0 100 100"><!-- spade -->
+      <path d="M50 4 C40 22 8 38 8 60 C8 74 19 82 30 82 C38 82 44 78 47 73 C46 84 41 92 30 97 L70 97 C59 92 54 84 53 73 C56 78 62 82 70 82 C81 82 92 74 92 60 C92 38 60 22 50 4 Z"/>
+    </symbol>
+    <symbol id="s1" viewBox="0 0 100 100"><!-- heart -->
+      <path d="M50 92 C22 68 4 50 4 30 C4 15 16 5 29 5 C39 5 46 11 50 19 C54 11 61 5 71 5 C84 5 96 15 96 30 C96 50 78 68 50 92 Z"/>
+    </symbol>
+    <symbol id="s2" viewBox="0 0 100 100"><!-- diamond -->
+      <path d="M50 3 L86 50 L50 97 L14 50 Z"/>
+    </symbol>
+    <symbol id="s3" viewBox="0 0 100 100"><!-- club -->
+      <circle cx="50" cy="27" r="21"/><circle cx="26" cy="60" r="21"/><circle cx="74" cy="60" r="21"/>
+      <path d="M40 40 L60 40 L60 62 L40 62 Z"/>
+      <path d="M46 58 C46 80 40 90 30 97 L70 97 C60 90 54 80 54 58 Z"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div id="app">
+  <header id="bar">
+    <div class="btns">
+      <button id="btnNew">Nytt spel</button>
+      <button id="btnUndo">↶ Ångra</button>
+      <button id="btnHint">Tips</button>
+      <button id="btnMenu">☰ Meny</button>
+    </div>
+    <div class="info">
+      <div class="sc">Poäng <b id="score">0</b></div>
+      <div>Drag <b id="moves">0</b></div>
+      <div class="tm">Tid <b id="time">0:00</b></div>
+    </div>
+  </header>
+  <main id="board"></main>
+  <div id="foot"></div>
+</div>
+
+<div id="toast"></div>
+<canvas id="fx" hidden></canvas>
+
+<div id="menu" class="overlay" hidden>
+  <div class="panel" role="dialog" aria-label="Meny">
+    <h2>Meny</h2>
+
+    <h3>Spel</h3>
+    <div class="seg wide" data-set="game">
+      <button data-v="klondike">Klondike</button>
+      <button data-v="freecell">FreeCell</button>
+    </div>
+    <div class="opt k-only">
+      <span>Kort att vända</span>
+      <div class="seg" data-set="draw"><button data-v="1">Dra 1</button><button data-v="3">Dra 3</button></div>
+    </div>
+    <div class="pair">
+      <button id="mRestart">↺ Spela om samma giv</button>
+      <button id="mRules">Regler</button>
+    </div>
+
+    <h3>Inställningar</h3>
+    <div class="opt">
+      <span>Fyrfärgad kortlek</span>
+      <div class="seg" data-set="fourColor"><button data-v="0">Av</button><button data-v="1">På</button></div>
+    </div>
+    <div class="opt">
+      <span>Bokstäver på korten</span>
+      <div class="seg" data-set="letters"><button data-v="sv">E Kn D K</button><button data-v="int">A J Q K</button></div>
+    </div>
+    <div class="opt">
+      <span>Visa tid</span>
+      <div class="seg" data-set="timer"><button data-v="0">Av</button><button data-v="1">På</button></div>
+    </div>
+
+    <h3>Statistik</h3>
+    <div id="statsList"></div>
+    <div class="pair"><button id="mReset">Nollställ statistik</button></div>
+
+    <button id="mClose" class="primary full">Klar</button>
+  </div>
+</div>
+
+<div id="modal" class="overlay" hidden>
+  <div class="dialog" role="dialog">
+    <h2 id="mTitle"></h2>
+    <p id="mText"></p>
+    <div class="row" id="mBtns"></div>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+/* ================= basics ================= */
+const K = 'klondike', FC = 'freecell';
+const RANKS_SV  = ['E','2','3','4','5','6','7','8','9','10','Kn','D','K'];
+const RANKS_INT = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+const FKEYS = ['f0','f1','f2','f3'];
+const CKEYS = ['c0','c1','c2','c3'];
+const suitOf = id => Math.floor(id / 13);           // 0 spader, 1 hjärter, 2 ruter, 3 klöver
+const rankOf = id => (id % 13) + 1;                 // 1..13
+const isRed  = id => { const s = suitOf(id); return s === 1 || s === 2; };
+const top = a => a[a.length - 1];
+const kind = key => key[0];                         // s(tock) w(aste) f(oundation) c(ell) t(ableau)
+const $ = s => document.querySelector(s);
+const fmt = sec => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+};
+
+let settings = Object.assign({ fourColor: false, letters: 'sv', timer: false }, store.get('pat.settings', {}));
+let stats = store.get('pat.stats', {});
+let S = null;              // current game state
+let history = [];          // undo snapshots (JSON strings)
+let autoTimer = null;
+
+const ranks = () => settings.letters === 'int' ? RANKS_INT : RANKS_SV;
+const tabKeys = (g = S.game) => Array.from({ length: g === K ? 7 : 8 }, (_, i) => 't' + i);
+
+/* ================= shuffling & dealing ================= */
+// Unbiased random integer 0..n-1 from the device's secure random source.
+function randInt(n) {
+  try {
+    const buf = new Uint32Array(1);
+    const limit = Math.floor(0x100000000 / n) * n;
+    let x;
+    do { crypto.getRandomValues(buf); x = buf[0]; } while (x >= limit);
+    return x % n;
+  } catch (e) { return Math.floor(Math.random() * n); }
+}
+// Fisher–Yates shuffle: every one of the 52! orders is equally likely.
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = randInt(i + 1);
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function makeState(game, draw, deck) {
+  deck = deck ? deck.slice() : shuffle([...Array(52).keys()]);
+  const st = {
+    v: 2, game, draw: draw === 3 ? 3 : 1, deck: deck.slice(), piles: {},
+    up: Array(52).fill(false),
+    score: 0, moves: 0, time: 0, won: false, counted: false, stuckShown: false,
+    fan: 0, passes: 0
+  };
+  const d = deck.slice();
+  FKEYS.forEach(k => { st.piles[k] = []; });
+  if (game === K) {
+    tabKeys(K).forEach(k => { st.piles[k] = []; });
+    for (let row = 0; row < 7; row++)
+      for (let col = row; col < 7; col++) st.piles['t' + col].push(d.pop());
+    tabKeys(K).forEach(k => { st.up[top(st.piles[k])] = true; });
+    st.piles.stock = d;
+    st.piles.waste = [];
+  } else {
+    tabKeys(FC).forEach(k => { st.piles[k] = []; });
+    CKEYS.forEach(k => { st.piles[k] = []; });
+    for (let i = 0; d.length; i++) st.piles['t' + (i % 8)].push(d.pop());
+    st.up.fill(true);
+  }
+  return st;
+}
+
+function validState(st) {
+  try {
+    if (!st || st.v !== 2 || (st.game !== K && st.game !== FC)) return false;
+    const need = st.game === K ? ['stock', 'waste', ...FKEYS, ...tabKeys(K)] : [...CKEYS, ...FKEYS, ...tabKeys(FC)];
+    if (!need.every(k => Array.isArray(st.piles[k]))) return false;
+    const all = need.flatMap(k => st.piles[k]);
+    return all.length === 52 && new Set(all).size === 52 && Array.isArray(st.deck) && st.deck.length === 52;
+  } catch (e) { return false; }
+}
+
+/* ================= saving & statistics ================= */
+const gkey = g => 'pat.game.' + g;
+const hkey = g => 'pat.hist.' + g;
+function save() {
+  store.set(gkey(S.game), S);
+  store.set(hkey(S.game), history.slice(-150));
+  store.set('pat.stats', stats);
+  store.set('pat.current', S.game);
+}
+function loadGame(g) {
+  const st = store.get(gkey(g), null);
+  if (validState(st) && !st.won) {
+    const h = store.get(hkey(g), []);
+    history = Array.isArray(h) ? h : [];
+    return st;
+  }
+  history = [];
+  return makeState(g, store.get('pat.draw', 1));
+}
+function pushHistory() {
+  history.push(JSON.stringify(S));
+  if (history.length > 300) history.shift();
+}
+const statKey = () => S.game === K ? 'k' + S.draw : 'fc';
+function stat() {
+  return stats[statKey()] || (stats[statKey()] = { played: 0, won: 0, best: 0, fewest: 0, bestTime: 0 });
+}
+function markPlayed() { if (!S.counted) { S.counted = true; stat().played++; } }
+
+/* ================= rules ================= */
+function locate(id) {
+  for (const k in S.piles) { const i = S.piles[k].indexOf(id); if (i >= 0) return { key: k, idx: i }; }
+  return null;
+}
+function canToFound(id, f) {
+  const p = S.piles[f];
+  if (!p.length) return rankOf(id) === 1;
+  const t = top(p);
+  return suitOf(t) === suitOf(id) && rankOf(id) === rankOf(t) + 1;
+}
+const foundFor = id => FKEYS.find(f => canToFound(id, f));
+const isParent = (a, b) => S.up[a] && S.up[b] && isRed(a) !== isRed(b) && rankOf(b) === rankOf(a) - 1;
+function isSeq(cards) {
+  for (let i = 1; i < cards.length; i++) if (!isParent(cards[i - 1], cards[i])) return false;
+  return true;
+}
+const freeCells = () => CKEYS.filter(k => !S.piles[k].length).length;
+const emptyCols = () => tabKeys().filter(k => !S.piles[k].length).length;
+// FreeCell: how many cards can be moved at once using free cells and empty columns
+const capacity = toEmpty => (1 + freeCells()) * Math.pow(2, Math.max(0, emptyCols() - (toEmpty ? 1 : 0)));
+
+function canPick(key, idx) {
+  const p = S.piles[key], k = kind(key);
+  if (k === 's') return false;
+  if (k === 't') {
+    if (S.game === K) return S.up[p[idx]];
+    const cards = p.slice(idx);
+    return isSeq(cards) && cards.length <= capacity(false);
+  }
+  if (k === 'f' && S.game === FC) return false;
+  return idx === p.length - 1;
+}
+function accepts(toKey, cards, fromKey) {
+  if (toKey === fromKey) return false;
+  const k = kind(toKey), p = S.piles[toKey], c = cards[0];
+  if (k === 'f') return cards.length === 1 && kind(fromKey) !== 'f' && canToFound(c, toKey);
+  if (k === 'c') return cards.length === 1 && !p.length;
+  if (k === 't') {
+    if (S.game === FC && cards.length > capacity(!p.length)) return false;
+    if (!p.length) return S.game === FC || rankOf(c) === 13;
+    const t = top(p);
+    return S.up[t] && isRed(t) !== isRed(c) && rankOf(c) === rankOf(t) - 1;
+  }
+  return false;
+}
+
+function applyMove(fromKey, idx, toKey) {
+  const src = S.piles[fromKey];
+  const cards = src.splice(idx);
+  S.piles[toKey].push(...cards);
+  if (S.game === K) {
+    const fk = kind(fromKey), tk = kind(toKey);
+    if (fk === 'w') S.fan = Math.max(1, (S.fan || 1) - 1);
+    if (tk === 'f') S.score += 10;
+    else if (fk === 'w') S.score += 5;
+    else if (fk === 'f') S.score -= 15;
+    if (fk === 't' && src.length && !S.up[top(src)]) { S.up[top(src)] = true; S.score += 5; }
+    S.score = Math.max(0, S.score);
+  }
+}
+function userMove(fromKey, idx, toKey) {
+  stopAuto(); clearHint();
+  pushHistory();
+  applyMove(fromKey, idx, toKey);
+  S.moves++;
+  markPlayed();
+  commit();
+}
+
+function drawStock() {
+  if (S.game !== K || S.won) return;
+  stopAuto(); clearHint();
+  const st = S.piles.stock, w = S.piles.waste;
+  if (!st.length) {
+    if (!w.length) return;
+    pushHistory();
+    while (w.length) { const c = w.pop(); S.up[c] = false; st.push(c); }
+    S.passes = (S.passes || 0) + 1;
+    S.fan = 0;
+    // Windows scoring: Draw 1 costs 100 per restart; Draw 3 is free for 3 restarts, then 20 each
+    if (S.draw === 1) S.score -= 100;
+    else if (S.passes > 3) S.score -= 20;
+    S.score = Math.max(0, S.score);
+  } else {
+    pushHistory();
+    let n = 0;
+    for (let i = 0; i < S.draw && st.length; i++) { const c = st.pop(); S.up[c] = true; w.push(c); n++; }
+    S.fan = n;
+  }
+  S.moves++;
+  markPlayed();
+  commit();
+}
+
+// After every change: check for a win, run automatic moves, or notice a dead end.
+function commit() {
+  if (FKEYS.every(k => S.piles[k].length === 13)) { win(); return; }
+  if (S.game === FC) visited.add(posKey(S.piles));
+  save(); render();
+  if (nextAuto()) {
+    autoTimer = setTimeout(() => {
+      autoTimer = null;
+      const m = nextAuto();
+      if (m) { applyMove(m.from, m.idx, m.to); commit(); }
+    }, 170);
+    return;
+  }
+  if (!S.stuckShown && !hasUsefulMove()) {
+    S.stuckShown = true; save();
+    setTimeout(showStuck, 400);
+  }
+}
+function stopAuto() { if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; } }
+
+function canAutoFinish() {
+  if (S.won) return false;
+  if (S.game === K)
+    return !S.piles.stock.length && !S.piles.waste.length && tabKeys().every(k => S.piles[k].every(c => S.up[c]));
+  // FreeCell: every column already in descending order → the rest plays itself
+  return tabKeys().every(k => {
+    const p = S.piles[k];
+    for (let i = 1; i < p.length; i++) if (rankOf(p[i]) > rankOf(p[i - 1])) return false;
+    return true;
+  });
+}
+// The next automatic move to a foundation, if any.
+function nextAuto() {
+  if (S.won) return null;
+  const finishing = canAutoFinish();
+  if (!finishing && S.game !== FC) return null;
+  const fr = [0, 0, 0, 0];
+  FKEYS.forEach(k => { const p = S.piles[k]; if (p.length) fr[suitOf(p[0])] = p.length; });
+  const keys = S.game === FC ? [...tabKeys(), ...CKEYS] : [...tabKeys(), 'waste'];
+  let best = null;
+  for (const k of keys) {
+    const p = S.piles[k];
+    if (!p.length) continue;
+    const c = top(p), f = foundFor(c);
+    if (!f) continue;
+    if (!finishing) {
+      // FreeCell "safe" auto-play: only when no lower card of the other colour could still need it
+      const r = rankOf(c), opp = isRed(c) ? [0, 3] : [1, 2];
+      if (!(r <= 2 || opp.every(s => fr[s] >= r - 1))) continue;
+    }
+    if (!best || rankOf(c) < rankOf(best.c)) best = { c, from: k, idx: p.length - 1, to: f };
+  }
+  return best;
+}
+
+/* ---------- where a tapped card should go ---------- */
+function bestMove(key, idx) {
+  if (!canPick(key, idx)) return null;
+  const p = S.piles[key], cards = p.slice(idx), single = idx === p.length - 1, k = kind(key);
+  if (k === 'f') return null;
+  if (single) { const f = foundFor(cards[0]); if (f) return f; }
+  const tabs = tabKeys(), n = tabs.length, start = k === 't' ? +key.slice(1) : -1;
+  let empty = null;
+  for (let j = 1; j <= n; j++) {
+    const t = 't' + ((start + j + n) % n);
+    if (t === key || !accepts(t, cards, key)) continue;
+    if (S.piles[t].length) return t;
+    if (empty === null) empty = t;
+  }
+  if (S.game === FC && single && k !== 'c') {
+    const c = CKEYS.find(c => !S.piles[c].length);
+    if (c) return c;
+  }
+  if (empty !== null && !(k === 't' && idx === 0)) return empty;
+  return null;
+}
+
+/* ---------- hints ---------- */
+function findHint() { return S.game === K ? hintKlondike() : hintFreeCell(); }
+
+function hintKlondike() {
+  const P = S.piles, tabs = tabKeys();
+  const sources = tabs.filter(k => P[k].length);
+  if (P.waste.length) sources.push('waste');
+  for (const k of sources) { const f = foundFor(top(P[k])); if (f) return { from: k, idx: P[k].length - 1, to: f }; }
+  for (const t of tabs) {
+    const p = P[t], first = p.findIndex(c => S.up[c]);
+    if (first < 0) continue;
+    for (let i = first; i < p.length; i++) {
+      const cards = p.slice(i);
+      const frees = i > first && !!foundFor(p[i - 1]);
+      for (const t2 of tabs) {
+        if (t2 === t || !accepts(t2, cards, t)) continue;
+        if (i === first && (i > 0 || P[t2].length)) return { from: t, idx: i, to: t2 };
+        if (frees) return { from: t, idx: i, to: t2 };
+      }
+    }
+  }
+  if (P.waste.length) {
+    const w = top(P.waste);
+    for (const t of tabs) if (accepts(t, [w], 'waste')) return { from: 'waste', idx: P.waste.length - 1, to: t };
+  }
+  if (P.stock.length || P.waste.length) return { stock: true };
+  return null;
+}
+
+// All sensible FreeCell moves, best first.
+function freeCellCandidates() {
+  const P = S.piles, tabs = tabKeys(), out = [];
+  for (const k of [...tabs, ...CKEYS]) {
+    if (!P[k].length) continue;
+    const f = foundFor(top(P[k]));
+    if (f) out.push({ from: k, idx: P[k].length - 1, to: f });
+  }
+  for (const k of CKEYS) {
+    if (!P[k].length) continue;
+    for (const t of tabs) if (P[t].length && accepts(t, [top(P[k])], k)) out.push({ from: k, idx: 0, to: t });
+  }
+  for (const toFilled of [true, false]) {
+    for (const t of tabs) {
+      const p = P[t];
+      if (!p.length) continue;
+      let s = p.length - 1;
+      while (s > 0 && isParent(p[s - 1], p[s])) s--;
+      for (let i = s; i < p.length; i++) {
+        if (i > 0 && isParent(p[i - 1], p[i]) && !foundFor(p[i - 1])) continue; // just shuffling
+        if (!toFilled && i === 0) continue;                                     // whole column to empty column
+        const cards = p.slice(i);
+        for (const t2 of tabs) {
+          if (t2 === t || (P[t2].length > 0) !== toFilled) continue;
+          if (accepts(t2, cards, t)) { out.push({ from: t, idx: i, to: t2 }); if (!toFilled) break; }
+        }
+      }
+    }
+  }
+  const cell = CKEYS.find(k => !P[k].length);
+  if (cell) {
+    const good = [], rest = [];
+    for (const t of tabs) {
+      const p = P[t];
+      if (!p.length) continue;
+      const m = { from: t, idx: p.length - 1, to: cell };
+      const u = p[p.length - 2];
+      if (p.length > 1 && (foundFor(u) || tabs.some(t2 => t2 !== t && P[t2].length && accepts(t2, [u], t)))) good.push(m);
+      else rest.push(m);
+    }
+    out.push(...good, ...rest);
+  }
+  return out;
+}
+// Positions already seen in this game, so hints don't send you round in circles.
+let visited = new Set();
+const posKey = piles => JSON.stringify(piles);
+function leadsBack(m) {
+  const piles = JSON.parse(JSON.stringify(S.piles));
+  piles[m.to].push(...piles[m.from].splice(m.idx));
+  return visited.has(posKey(piles));
+}
+function hintFreeCell() {
+  const r = solveFreeCell();
+  if (r.move) {
+    const m = r.move;
+    const from = (m.ft === 't' ? 't' : 'c') + m.fi;
+    const p = S.piles[from];
+    const to = m.tt === 'f' ? foundFor(m.c) : (m.tt === 'c' ? 'c' : 't') + m.ti;
+    if (to && p.length && top(p) === m.c && accepts(to, [m.c], from)) return { from, idx: p.length - 1, to };
+  }
+  if (r.impossible) return { impossible: true };
+  const c = freeCellCandidates();
+  return c.find(m => !leadsBack(m)) || c[0] || null;
+}
+
+/* FreeCell solver: a best-first search over single-card moves (with the same safe
+   auto-play the game does). Used for hints; gives up quietly after a short time. */
+let fcPlan = new Map();   // remembered winning line: position → next move
+function solveFreeCell(maxNodes = 120000, maxMs = 1500) {
+  const t0 = Date.now();
+  const rk = c => c % 13 + 1, su = c => (c / 13) | 0;
+  const red = c => { const x = su(c); return x === 1 || x === 2; };
+  const fits = (a, b) => red(a) !== red(b) && rk(b) === rk(a) - 1;      // b may go on a
+  const canF = (n, c) => n.found[su(c)] === rk(c) - 1;
+  const safe = (n, c) => { const r = rk(c); return r <= 2 || (red(c) ? [0, 3] : [1, 2]).every(x => n.found[x] >= r - 1); };
+  function autoplay(n) {
+    let moved = true;
+    while (moved) {
+      moved = false;
+      for (const col of n.cols) {
+        const c = col[col.length - 1];
+        if (col.length && canF(n, c) && safe(n, c)) { col.pop(); n.found[su(c)]++; moved = true; }
+      }
+      for (let i = 0; i < 4; i++) {
+        const c = n.cells[i];
+        if (c >= 0 && canF(n, c) && safe(n, c)) { n.cells[i] = -1; n.found[su(c)]++; moved = true; }
+      }
+    }
+  }
+  const key = n => n.cols.map(c => c.join(',')).sort().join('|') + '#' +
+    n.cells.filter(c => c >= 0).sort((a, b) => a - b).join(',') + '#' + n.found.join(',');
+  const solved = n => n.cols.every(col => { for (let i = 1; i < col.length; i++) if (rk(col[i]) > rk(col[i - 1])) return false; return true; });
+  const score = n => {
+    let left = 52, blk = 0;
+    n.found.forEach(f => { left -= f; });
+    for (const col of n.cols) { let mn = 99; for (const c of col) { const r = rk(c); if (r > mn) blk++; else mn = r; } }
+    const fc = n.cells.filter(c => c < 0).length, ec = n.cols.filter(c => !c.length).length;
+    return left + 2 * blk - fc * 0.5 - ec * 1.5 + n.g * 0.1;
+  };
+  function children(n) {
+    const out = [], emptyCell = n.cells.indexOf(-1);
+    for (let i = 0; i < 8; i++) {
+      const col = n.cols[i];
+      if (!col.length) continue;
+      const c = col[col.length - 1];
+      if (canF(n, c)) out.push({ ft: 't', fi: i, tt: 'f', ti: su(c), c });
+      const onParent = col.length > 1 && fits(col[col.length - 2], c);
+      let usedEmpty = false;
+      for (let j = 0; j < 8; j++) {
+        if (j === i) continue;
+        const d = n.cols[j];
+        if (d.length) { if (!onParent && fits(d[d.length - 1], c)) out.push({ ft: 't', fi: i, tt: 't', ti: j, c }); }
+        else if (!usedEmpty && col.length > 1) { usedEmpty = true; out.push({ ft: 't', fi: i, tt: 't', ti: j, c }); }
+      }
+      if (emptyCell >= 0) out.push({ ft: 't', fi: i, tt: 'c', ti: emptyCell, c });
+    }
+    for (let i = 0; i < 4; i++) {
+      const c = n.cells[i];
+      if (c < 0) continue;
+      if (canF(n, c)) out.push({ ft: 'c', fi: i, tt: 'f', ti: su(c), c });
+      let usedEmpty = false;
+      for (let j = 0; j < 8; j++) {
+        const d = n.cols[j];
+        if (d.length ? fits(d[d.length - 1], c) : !usedEmpty) { if (!d.length) usedEmpty = true; out.push({ ft: 'c', fi: i, tt: 't', ti: j, c }); }
+      }
+    }
+    return out;
+  }
+  function apply(n, m) {
+    const nn = { cols: n.cols.map(c => c.slice()), cells: n.cells.slice(), found: n.found.slice(), parent: n, m, g: n.g + 1 };
+    let c;
+    if (m.ft === 't') c = nn.cols[m.fi].pop(); else { c = nn.cells[m.fi]; nn.cells[m.fi] = -1; }
+    if (m.tt === 'f') nn.found[su(c)]++;
+    else if (m.tt === 'c') nn.cells[m.ti] = c;
+    else nn.cols[m.ti].push(c);
+    autoplay(nn);
+    return nn;
+  }
+  // tiny binary heap
+  const heap = [], hv = [];
+  const push = (n, v) => {
+    heap.push(n); hv.push(v);
+    let i = heap.length - 1;
+    while (i > 0) { const p = (i - 1) >> 1; if (hv[p] <= hv[i]) break; [heap[p], heap[i]] = [heap[i], heap[p]]; [hv[p], hv[i]] = [hv[i], hv[p]]; i = p; }
+  };
+  const pop = () => {
+    const r = heap[0], ln = heap.pop(), lv = hv.pop();
+    if (heap.length) {
+      heap[0] = ln; hv[0] = lv;
+      let i = 0;
+      for (;;) {
+        const a = 2 * i + 1, b = a + 1; let m = i;
+        if (a < heap.length && hv[a] < hv[m]) m = a;
+        if (b < heap.length && hv[b] < hv[m]) m = b;
+        if (m === i) break;
+        [heap[m], heap[i]] = [heap[i], heap[m]]; [hv[m], hv[i]] = [hv[i], hv[m]]; i = m;
+      }
+    }
+    return r;
+  };
+
+  const root = {
+    cols: tabKeys().map(k => S.piles[k].slice()),
+    cells: CKEYS.map(k => S.piles[k].length ? S.piles[k][0] : -1),
+    found: [0, 0, 0, 0], parent: null, m: null, g: 0
+  };
+  FKEYS.forEach(k => { const p = S.piles[k]; if (p.length) root.found[suitOf(p[0])] = p.length; });
+  autoplay(root);
+  if (solved(root)) return { solved: true, move: null };
+  root.k = key(root);
+  if (fcPlan.has(root.k)) return { solved: true, move: fcPlan.get(root.k), cached: true };
+  const seen = new Set([root.k]);
+  push(root, score(root));
+  let nodes = 0;
+  while (heap.length) {
+    const n = pop();
+    if (++nodes > maxNodes || (nodes % 256 === 0 && Date.now() - t0 > maxMs)) return { unknown: true, nodes };
+    for (const m of children(n)) {
+      const nn = apply(n, m);
+      const k = key(nn);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      nn.k = k;
+      if (solved(nn)) {
+        fcPlan = new Map();
+        let first = null;
+        for (let x = nn; x.parent; x = x.parent) { fcPlan.set(x.parent.k, x.m); first = x.m; }
+        return { solved: true, move: first, nodes, ms: Date.now() - t0 };
+      }
+      push(nn, score(nn));
+    }
+  }
+  return { impossible: true, nodes };
+}
+
+// Klondike: cards that can become the playable waste card just by turning the deck.
+function reachableWaste() {
+  const set = new Set(), P = S.piles;
+  if (P.waste.length) set.add(top(P.waste));
+  if (S.draw === 1) { P.stock.forEach(c => set.add(c)); P.waste.forEach(c => set.add(c)); return set; }
+  const stock = P.stock.slice(), waste = P.waste.slice();
+  const total = stock.length + waste.length;
+  for (let step = 0; step < 2 * (total + 3); step++) {
+    if (!stock.length) { if (!waste.length) break; while (waste.length) stock.push(waste.pop()); }
+    for (let i = 0; i < 3 && stock.length; i++) waste.push(stock.pop());
+    set.add(top(waste));
+  }
+  return set;
+}
+function hasUsefulMove() {
+  if (S.game === FC) return freeCells() > 0 || emptyCols() > 0 || freeCellCandidates().length > 0;
+  const h = findHint();
+  if (h && !h.stock) return true;
+  for (const c of reachableWaste()) {
+    if (foundFor(c)) return true;
+    for (const t of tabKeys()) if (accepts(t, [c], 'waste')) return true;
+  }
+  return false;
+}
+
+/* ================= drawing the table ================= */
+const board = $('#board');
+const cardEls = [];
+let slotEls = {};
+let PL = {};               // pile positions
+let L = null;              // sizes
+const pos = [];
+
+const suitSvg = s => `<svg viewBox="0 0 100 100"><use href="#s${s}"/></svg>`;
+
+function buildCards() {
+  for (let id = 0; id < 52; id++) {
+    const el = document.createElement('div');
+    el.className = 'card';
+    el.dataset.id = id;
+    const s = suitOf(id);
+    el.innerHTML =
+      `<div class="face s${s}"><div class="rank"></div>` +
+      `<div class="corner">${suitSvg(s)}</div><div class="mid">${suitSvg(s)}</div></div>` +
+      `<div class="back"></div>`;
+    board.appendChild(el);
+    cardEls.push(el);
+  }
+}
+function buildSlots() {
+  Object.values(slotEls).forEach(e => e.remove());
+  slotEls = {};
+  const mk = (key, cls, html = '') => {
+    const d = document.createElement('div');
+    d.className = 'slot ' + cls;
+    d.dataset.key = key;
+    d.innerHTML = html;
+    board.insertBefore(d, board.firstChild);
+    slotEls[key] = d;
+  };
+  if (S.game === K) mk('stock', 'stock', '<span class="recycle">↻</span>');
+  else CKEYS.forEach(k => mk(k, 'cell'));
+  FKEYS.forEach(k => mk(k, 'found', ranks()[0]));
+  tabKeys().forEach(k => mk(k, 'tabslot', S.game === K ? 'K' : ''));
+}
+function applySettings() {
+  document.body.classList.toggle('four', settings.fourColor);
+  document.body.classList.toggle('timer', settings.timer);
+  document.body.classList.toggle('fc', S.game === FC);
+  const R = ranks();
+  cardEls.forEach((el, id) => { el.querySelector('.rank').textContent = R[rankOf(id) - 1]; });
+  FKEYS.forEach(k => { if (slotEls[k]) slotEls[k].textContent = R[0]; });
+}
+
+function layout() {
+  const W = board.clientWidth, H = board.clientHeight;
+  const n = S.game === K ? 7 : 8;
+  const gap = Math.max(6, Math.round(W * 0.014));
+  let cw = (W - gap * (n + 1)) / n;
+  cw = Math.floor(Math.min(cw, (H * 0.27) / 1.4, 170));
+  const ch = Math.round(cw * 1.4);
+  const x0 = Math.round((W - (cw * n + gap * (n - 1))) / 2);
+  L = { W, H, cw, ch, gap, topY: gap, tabY: gap * 2 + ch + Math.round(gap * 0.5) };
+  const X = i => x0 + i * (cw + gap);
+  board.style.setProperty('--cw', cw + 'px');
+  board.style.setProperty('--ch', ch + 'px');
+  PL = {};
+  if (S.game === K) {
+    PL.stock = { x: X(0), y: L.topY, kind: 'stack' };
+    PL.waste = { x: X(1), y: L.topY, kind: 'waste' };
+    FKEYS.forEach((k, i) => { PL[k] = { x: X(3 + i), y: L.topY, kind: 'stack' }; });
+  } else {
+    CKEYS.forEach((k, i) => { PL[k] = { x: X(i), y: L.topY, kind: 'stack' }; });
+    FKEYS.forEach((k, i) => { PL[k] = { x: X(4 + i), y: L.topY, kind: 'stack' }; });
+  }
+  tabKeys().forEach((k, i) => { PL[k] = { x: X(i), y: L.tabY, kind: 'tab' }; });
+  for (const k in slotEls) { const p = PL[k]; if (p) slotEls[k].style.transform = `translate(${p.x}px, ${p.y}px)`; }
+}
+
+function tabOffsets(p) {
+  const avail = L.H - L.tabY - L.gap;
+  let fd = L.ch * 0.13, fu = L.ch * 0.30, down = 0, up = 0;
+  for (let i = 0; i < p.length - 1; i++) S.up[p[i]] ? up++ : down++;
+  if (L.ch + down * fd + up * fu > avail) {
+    if (down) fd = Math.max(L.ch * 0.05, Math.min(fd, (avail - L.ch - up * fu) / down));
+    if (up && L.ch + down * fd + up * fu > avail) fu = Math.max(L.ch * 0.12, (avail - L.ch - down * fd) / up);
+  }
+  return { fd, fu };
+}
+
+function render() {
+  const z = [];
+  for (const k in PL) {
+    const pl = PL[k], p = S.piles[k];
+    if (pl.kind === 'stack') {
+      p.forEach((id, i) => { pos[id] = { x: pl.x, y: pl.y }; z[id] = (k === 'stock' ? 10 : 200) + i; });
+    } else if (pl.kind === 'waste') {
+      const n = p.length;
+      const vis = S.draw === 3 ? Math.min(S.fan == null ? 3 : Math.max(1, S.fan), n) : 1;
+      p.forEach((id, i) => {
+        const j = i - (n - vis);
+        pos[id] = { x: pl.x + (j > 0 ? j * L.cw * 0.34 : 0), y: pl.y };
+        z[id] = 100 + i;
+      });
+    } else {
+      const { fd, fu } = tabOffsets(p);
+      let y = pl.y;
+      p.forEach((id, i) => { pos[id] = { x: pl.x, y: Math.round(y) }; z[id] = 300 + i; y += S.up[id] ? fu : fd; });
+    }
+  }
+  for (let id = 0; id < 52; id++) {
+    const el = cardEls[id];
+    const t = `translate(${pos[id].x}px, ${pos[id].y}px)`;
+    if (el.style.transform !== t) {
+      el.style.zIndex = 1000 + z[id];          // lift while sliding
+      clearTimeout(el._zt);
+      el._zt = setTimeout(() => { el.style.zIndex = z[id]; el._zt = null; }, 230);
+      el.style.transform = t;
+    } else if (!el._zt) {
+      el.style.zIndex = z[id];
+    }
+    el.classList.toggle('up', S.up[id]);
+    el.classList.remove('dragging');
+  }
+  if (slotEls.stock) slotEls.stock.classList.toggle('empty-all', !S.piles.stock.length && !S.piles.waste.length);
+
+  $('#score').textContent = S.score;
+  $('#moves').textContent = S.moves;
+  $('#time').textContent = fmt(S.time || 0);
+  $('#btnUndo').disabled = !history.length || S.won;
+  $('#foot').textContent = footText();
+}
+
+function footText() {
+  const st = stats[statKey()];
+  const name = S.game === K ? `Klondike · Dra ${S.draw}` : 'FreeCell';
+  if (!st || !st.played) return `${name}   ·   Tryck på ett kort för att flytta det, eller dra det med fingret.`;
+  let t = `${name}   ·   Vunna spel: ${st.won} av ${st.played}`;
+  if (S.game === K) t += `   ·   Bästa poäng: ${st.best}`;
+  else if (st.fewest) t += `   ·   Färst drag: ${st.fewest}`;
+  if (settings.timer && st.bestTime) t += `   ·   Bästa tid: ${fmt(st.bestTime)}`;
+  return t;
+}
+
+/* ================= messages ================= */
+let toastT;
+function toast(msg, ms = 2600) {
+  const t = $('#toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), ms);
+}
+function dialog(title, text, buttons, leftAlign) {
+  $('#mTitle').textContent = title;
+  const p = $('#mText');
+  p.textContent = text;
+  p.className = leftAlign ? 'left' : '';
+  const row = $('#mBtns'); row.innerHTML = '';
+  buttons.forEach(b => {
+    const el = document.createElement('button');
+    el.textContent = b.label;
+    if (b.primary) el.className = 'primary';
+    el.onclick = () => { $('#modal').hidden = true; b.action && b.action(); };
+    row.appendChild(el);
+  });
+  $('#modal').hidden = false;
+}
+function showWin() {
+  let txt = S.game === K ? `Poäng: ${S.score}   ·   Drag: ${S.moves}` : `Drag: ${S.moves}`;
+  if (settings.timer) txt += `   ·   Tid: ${fmt(S.time || 0)}`;
+  dialog('Du vann! 🎉', txt, [
+    { label: 'Stäng' },
+    { label: 'Spela igen', primary: true, action: () => newGame() }
+  ]);
+}
+function showStuck() {
+  if (S.won || !$('#modal').hidden) return;
+  dialog('Inga fler drag', 'Det verkar inte finnas några fler drag att göra i det här spelet.', [
+    { label: 'Stäng' },
+    { label: 'Ångra', action: undo },
+    { label: 'Spela om', action: restartDeal },
+    { label: 'Nytt spel', primary: true, action: () => newGame() }
+  ]);
+}
+const RULES = {
+  [K]: 'Målet är att flytta alla kort till de fyra högarna uppe till höger, en hög per färg, i ordning från ess till kung.\n\n' +
+       'I raderna nedanför lägger du korten i fallande ordning, med omväxlande röda och svarta kort. Du kan flytta flera kort på en gång.\n\n' +
+       'Bara en kung kan läggas på en tom plats. Tryck på högen uppe till vänster för att vända upp nya kort.',
+  [FC]: 'Alla kort ligger synliga från början. Målet är att flytta alla kort till de fyra högarna uppe till höger, en hög per färg, i ordning från ess till kung.\n\n' +
+        'I raderna lägger du korten i fallande ordning, med omväxlande röda och svarta kort.\n\n' +
+        'De fyra rutorna uppe till vänster rymmer ett kort var. Vilket kort som helst får läggas på en tom rad. Ju fler lediga platser, desto fler kort kan du flytta på en gång.'
+};
+
+/* ---------- hint highlight ---------- */
+let hintT;
+function clearHint() {
+  clearTimeout(hintT);
+  document.querySelectorAll('.hint').forEach(e => e.classList.remove('hint'));
+}
+function flash(els) {
+  clearHint();
+  els.forEach(e => e && e.classList.add('hint'));
+  hintT = setTimeout(clearHint, 2200);
+}
+function flushAuto() {
+  let m;
+  while (autoTimer && (m = nextAuto())) { stopAuto(); applyMove(m.from, m.idx, m.to); commit(); }
+}
+function showHint() {
+  if (S.won) return;
+  flushAuto();
+  if (S.won) return;
+  const h = findHint();
+  if (h && h.impossible) { toast('Jag hittar ingen väg till vinst härifrån. Prova Ångra eller Nytt spel.', 3500); return; }
+  if (!h || !hasUsefulMove()) { toast('Inga fler drag. Prova Ångra eller Nytt spel.'); return; }
+  if (h.stock) {
+    flash([S.piles.stock.length ? cardEls[top(S.piles.stock)] : slotEls.stock]);
+    toast(S.piles.stock.length ? 'Tryck på högen för att vända upp ett kort.' : 'Tryck på den tomma högen för att börja om.');
+    return;
+  }
+  const dp = S.piles[h.to];
+  flash([cardEls[S.piles[h.from][h.idx]], dp.length ? cardEls[top(dp)] : slotEls[h.to]]);
+}
+function nope(id) {
+  const el = cardEls[id];
+  el.classList.remove('nope'); void el.offsetWidth; el.classList.add('nope');
+  setTimeout(() => el.classList.remove('nope'), 400);
+}
+
+/* ================= win celebration ================= */
+const SUIT_PATHS = [
+  'M50 4 C40 22 8 38 8 60 C8 74 19 82 30 82 C38 82 44 78 47 73 C46 84 41 92 30 97 L70 97 C59 92 54 84 53 73 C56 78 62 82 70 82 C81 82 92 74 92 60 C92 38 60 22 50 4 Z',
+  'M50 92 C22 68 4 50 4 30 C4 15 16 5 29 5 C39 5 46 11 50 19 C54 11 61 5 71 5 C84 5 96 15 96 30 C96 50 78 68 50 92 Z',
+  'M50 3 L86 50 L50 97 L14 50 Z',
+  'M46 58 C46 80 40 90 30 97 L70 97 C60 90 54 80 54 58 Z'
+];
+let suitPaths = null;
+function drawSuit(ctx, s, size) {
+  if (!suitPaths) { try { suitPaths = SUIT_PATHS.map(p => new Path2D(p)); } catch (e) { suitPaths = []; } }
+  ctx.save();
+  ctx.scale(size / 100, size / 100);
+  ctx.translate(-50, -50);
+  ctx.fillStyle = (s === 1 || s === 2) ? '#e0284a' : '#f5f5f5';
+  if (s === 3) {
+    ctx.beginPath();
+    ctx.moveTo(71, 27); ctx.arc(50, 27, 21, 0, 7); ctx.moveTo(47, 60); ctx.arc(26, 60, 21, 0, 7); ctx.moveTo(95, 60); ctx.arc(74, 60, 21, 0, 7);
+    ctx.fill();
+  }
+  if (suitPaths[s]) ctx.fill(suitPaths[s]);
+  ctx.restore();
+}
+function celebrate(done) {
+  let reduce = false;
+  try { reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+  const cv = $('#fx');
+  let ctx = null;
+  try { ctx = cv.getContext('2d'); } catch (e) {}
+  if (reduce || !ctx) { done(); return; }
+  const dpr = window.devicePixelRatio || 1, W = window.innerWidth, H = window.innerHeight;
+  cv.width = W * dpr; cv.height = H * dpr;
+  cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const colors = ['#ffd400', '#ffffff', '#ff8fa3', '#8fe3b0', '#9ec5ff'];
+  const parts = [];
+  const N = Math.round(Math.min(120, (W * H) / 8000));
+  for (let i = 0; i < N; i++) {
+    parts.push({
+      x: Math.random() * W, y: -Math.random() * H * 0.7 - 30,
+      vy: H * (0.18 + Math.random() * 0.17), sway: 15 + Math.random() * 30, ph: Math.random() * 6.3,
+      rot: Math.random() * 6.3, vr: (Math.random() - 0.5) * 1.6, size: 10 + Math.random() * 12,
+      suit: Math.random() < 0.4 ? Math.floor(Math.random() * 4) : -1,
+      color: colors[Math.floor(Math.random() * colors.length)]
+    });
+  }
+  const DUR = 4500, t0 = performance.now();
+  let raf, finished = false;
+  const end = () => {
+    if (finished) return;
+    finished = true;
+    cancelAnimationFrame(raf);
+    cv.hidden = true;
+    cv.removeEventListener('pointerdown', end);
+    done();
+  };
+  cv.addEventListener('pointerdown', end);
+  cv.hidden = false;
+  const frame = now => {
+    const el = now - t0, t = el / 1000;
+    ctx.clearRect(0, 0, W, H);
+    ctx.globalAlpha = Math.max(0, Math.min(1, el / 400, (DUR - el) / 700));
+    for (const p of parts) {
+      ctx.save();
+      ctx.translate(p.x + Math.sin(p.ph + t * 1.4) * p.sway, p.y + p.vy * t);
+      ctx.rotate(p.rot + p.vr * t);
+      if (p.suit >= 0) drawSuit(ctx, p.suit, p.size * 1.7);
+      else { ctx.fillStyle = p.color; ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2); }
+      ctx.restore();
+    }
+    if (el < DUR) raf = requestAnimationFrame(frame); else end();
+  };
+  raf = requestAnimationFrame(frame);
+}
+
+function win() {
+  S.won = true;
+  stopAuto(); clearHint();
+  const st = stat();
+  st.won++;
+  if (S.game === K) st.best = Math.max(st.best, S.score);
+  else st.fewest = st.fewest ? Math.min(st.fewest, S.moves) : S.moves;
+  if (S.time) st.bestTime = st.bestTime ? Math.min(st.bestTime, S.time) : S.time;
+  save(); render();
+  setTimeout(() => celebrate(showWin), 350);
+}
+
+/* ================= actions ================= */
+function startState(st) {
+  stopAuto(); clearHint();
+  S = st;
+  visited = new Set();
+  fcPlan = new Map();
+  buildSlots(); applySettings(); layout();
+  save(); render();
+  commit();
+}
+function newGame(draw = S.draw) {
+  if (S.game === K) store.set('pat.draw', draw);
+  history = [];
+  startState(makeState(S.game, draw));
+}
+function confirmNew(draw = S.draw) {
+  if (S.moves > 0 && !S.won) {
+    dialog('Starta ett nytt spel?', draw !== S.draw
+        ? `Ett nytt spel startas med Dra ${draw}.`
+        : 'Det pågående spelet avslutas.', [
+      { label: 'Fortsätt spela' },
+      { label: 'Nytt spel', primary: true, action: () => newGame(draw) }
+    ]);
+  } else newGame(draw);
+}
+function restartDeal() {
+  const counted = S.counted && !S.won;
+  history = [];
+  const st = makeState(S.game, S.draw, S.deck);
+  st.counted = counted;
+  startState(st);
+}
+function confirmRestart() {
+  if (S.moves > 0 && !S.won) {
+    dialog('Spela om samma giv?', 'Korten läggs ut precis som när det här spelet började.', [
+      { label: 'Avbryt' },
+      { label: 'Spela om', primary: true, action: restartDeal }
+    ]);
+  } else restartDeal();
+}
+function switchGame(g) {
+  if (g === S.game) return;
+  save();
+  const st = loadGame(g);
+  startState(st);
+}
+function undo() {
+  if (!history.length || S.won) return;
+  stopAuto(); clearHint();
+  const time = S.time, counted = S.counted;
+  S = JSON.parse(history.pop());
+  S.time = time; S.counted = counted;
+  save(); render();
+}
+function tapCard(id) {
+  clearHint();
+  if (S.won) return;
+  const loc = locate(id);
+  if (loc.key === 'stock') { drawStock(); return; }
+  const dest = bestMove(loc.key, loc.idx);
+  if (dest) userMove(loc.key, loc.idx, dest);
+  else nope(id);
+}
+
+/* ---------- menu ---------- */
+function renderMenu() {
+  const cur = { game: S.game, draw: String(S.draw), fourColor: settings.fourColor ? '1' : '0', letters: settings.letters, timer: settings.timer ? '1' : '0' };
+  document.querySelectorAll('#menu .seg[data-set]').forEach(seg => {
+    seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === cur[seg.dataset.set]));
+  });
+  const rows = [['k1', 'Klondike, Dra 1'], ['k3', 'Klondike, Dra 3'], ['fc', 'FreeCell']];
+  $('#statsList').innerHTML = rows.map(([k, name]) => {
+    const s = stats[k];
+    let d = 'Inga spel än';
+    if (s && s.played) {
+      d = `Vunna ${s.won} av ${s.played}`;
+      if (k !== 'fc' && s.won) d += ` · bästa poäng ${s.best}`;
+      if (k === 'fc' && s.fewest) d += ` · färst drag ${s.fewest}`;
+      if (s.bestTime && s.won) d += ` · bästa tid ${fmt(s.bestTime)}`;
+    }
+    return `<div class="srow"><b>${name}</b><span>${d}</span></div>`;
+  }).join('');
+}
+function openMenu() { clearHint(); renderMenu(); $('#menu').hidden = false; }
+function closeMenu() { $('#menu').hidden = true; }
+function setOption(name, v) {
+  if (name === 'game') { closeMenu(); switchGame(v); return; }
+  if (name === 'draw') { const d = +v; if (d !== S.draw) { closeMenu(); confirmNew(d); } return; }
+  if (name === 'fourColor') settings.fourColor = v === '1';
+  if (name === 'letters') settings.letters = v;
+  if (name === 'timer') settings.timer = v === '1';
+  store.set('pat.settings', settings);
+  applySettings(); renderMenu(); render();
+}
+document.querySelectorAll('#menu .seg[data-set]').forEach(seg => {
+  seg.addEventListener('click', e => { const b = e.target.closest('button'); if (b) setOption(seg.dataset.set, b.dataset.v); });
+});
+$('#mClose').onclick = closeMenu;
+$('#menu').addEventListener('click', e => { if (e.target.id === 'menu') closeMenu(); });
+$('#mRestart').onclick = () => { closeMenu(); confirmRestart(); };
+$('#mRules').onclick = () => {
+  dialog(S.game === K ? 'Regler – Klondike' : 'Regler – FreeCell',
+    RULES[S.game] + '\n\nTryck på ett kort så flyttas det dit det passar bäst. Du kan också dra korten med fingret.',
+    [{ label: 'Stäng', primary: true }], true);
+};
+$('#mReset').onclick = () => {
+  dialog('Nollställ statistik?', 'All statistik för alla spel tas bort.', [
+    { label: 'Avbryt' },
+    { label: 'Nollställ', primary: true, action: () => { stats = {}; save(); renderMenu(); render(); } }
+  ]);
+};
+
+$('#btnNew').onclick = () => confirmNew();
+$('#btnUndo').onclick = undo;
+$('#btnHint').onclick = showHint;
+$('#btnMenu').onclick = openMenu;
+
+/* ================= touch / mouse ================= */
+let drag = null;
+board.addEventListener('pointerdown', e => {
+  if (drag || !e.isPrimary) return;
+  const el = e.target.closest('.card');
+  if (!el) {
+    const sl = e.target.closest('.slot');
+    if (sl && sl.dataset.key === 'stock') drawStock();
+    return;
+  }
+  e.preventDefault();
+  const id = +el.dataset.id;
+  const loc = locate(id);
+  if (loc.key === 'stock') { drawStock(); return; }
+  if (S.won) return;
+  if (!canPick(loc.key, loc.idx)) {
+    const p = S.piles[loc.key];
+    if (loc.key === 'waste' && p.length) tapCard(top(p));   // a covered waste card: use the top one
+    else if (S.up[id]) nope(id);
+    return;
+  }
+  const ids = S.piles[loc.key].slice(loc.idx);
+  drag = { id, ids, from: loc.key, idx: loc.idx, sx: e.clientX, sy: e.clientY, moved: false, pid: e.pointerId,
+           base: ids.map(i => ({ ...pos[i] })) };
+  try { board.setPointerCapture(e.pointerId); } catch (err) {}
+});
+board.addEventListener('pointermove', e => {
+  if (!drag || e.pointerId !== drag.pid) return;
+  const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+  if (!drag.moved && Math.hypot(dx, dy) < 12) return;
+  if (!drag.moved) { drag.moved = true; clearHint(); stopAuto(); }
+  drag.ids.forEach((id, i) => {
+    const el = cardEls[id];
+    clearTimeout(el._zt); el._zt = null;
+    el.classList.add('dragging');
+    el.style.zIndex = 3000 + i;
+    el.style.transform = `translate(${drag.base[i].x + dx}px, ${drag.base[i].y + dy}px)`;
+  });
+});
+function dropTarget(cx, cy, cards, fromKey) {
+  let best = null, bestD = Infinity;
+  for (const k in PL) {
+    if (k === 'stock' || k === 'waste') continue;
+    const p = PL[k];
+    const x1 = p.x - L.gap / 2, x2 = p.x + L.cw + L.gap / 2;
+    const y1 = p.y - L.ch * 0.3, y2 = p.kind === 'tab' ? L.H + 50 : p.y + L.ch * 1.3;
+    if (cx < x1 || cx > x2 || cy < y1 || cy > y2) continue;
+    if (!accepts(k, cards, fromKey)) continue;
+    const d = Math.abs(cx - (p.x + L.cw / 2)) + Math.abs(cy - (p.y + L.ch / 2)) * 0.2;
+    if (d < bestD) { bestD = d; best = k; }
+  }
+  return best;
+}
+function endDrag(e, cancelled) {
+  if (!drag || e.pointerId !== drag.pid) return;
+  const d = drag; drag = null;
+  if (cancelled) { render(); return; }
+  if (!d.moved) { tapCard(d.id); return; }
+  const cx = d.base[0].x + (e.clientX - d.sx) + L.cw / 2;
+  const cy = d.base[0].y + (e.clientY - d.sy) + L.ch / 2;
+  const to = dropTarget(cx, cy, d.ids, d.from);
+  if (to) userMove(d.from, d.idx, to);
+  else { render(); commit(); }
+}
+board.addEventListener('pointerup', e => endDrag(e, false));
+board.addEventListener('pointercancel', e => endDrag(e, true));
+document.addEventListener('gesturestart', e => e.preventDefault());
+
+/* ================= clock ================= */
+setInterval(() => {
+  if (!S || document.hidden || S.won || !S.counted) return;
+  S.time = (S.time || 0) + 1;
+  if (settings.timer) $('#time').textContent = fmt(S.time);
+  if (S.time % 5 === 0) store.set(gkey(S.game), S);
+}, 1000);
+
+/* ================= start ================= */
+buildCards();
+const startGame = store.get('pat.current', K) === FC ? FC : K;
+S = loadGame(startGame);
+buildSlots(); applySettings(); layout(); render();
+commit();
+
+let rT;
+const relayout = () => { clearTimeout(rT); rT = setTimeout(() => { layout(); render(); }, 60); };
+window.addEventListener('resize', relayout);
+window.addEventListener('orientationchange', relayout);
+if (window.ResizeObserver) new ResizeObserver(relayout).observe(board);
+
+// For the iPad Home Screen: keeps a copy so the game works offline.
+try {
+  if ('serviceWorker' in navigator && location.protocol === 'https:' && window.self === window.top) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+} catch (e) {}
+
+// test hook
+window.__sol = {
+  get S() { return S; },
+  set S(v) { history = []; startState(v); },
+  makeState, findHint, solveFreeCell, tapCard, bestMove, hasUsefulMove, nextAuto, canAutoFinish, userMove, shuffle,
+  celebrate, get autoPending() { return !!autoTimer; },
+  flushAuto() { let m; while ((m = nextAuto())) { stopAuto(); applyMove(m.from, m.idx, m.to); commit(); } stopAuto(); }
+};
+})();
+</script>
+</body>
+</html>
